@@ -381,7 +381,7 @@ def main():
 
     #Hide create embeddings tab 
     tab1 = st.tabs(["Query"])[0]
-
+    render_query_tab()
     # Main tabs
     #tab1, tab2 = st.tabs(["Create Embeddings", "Query"])
 
