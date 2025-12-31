@@ -3,42 +3,42 @@ PDF Embeddings Application
 A Streamlit app for creating contextual embeddings from PDFs and querying them.
 """
 
-print("Loading app.py...", flush=True)
+print("Loading app.py...", flush=True) #Confirms that app.py execution has started
 
-from datetime import datetime
+from datetime import datetime #loads datetime class into memory used for ZIP filename generation and bundle creation timestamp
 
-import streamlit as st
-from google import genai
+import os
+import streamlit as st #loads streamlit framework used for UI
+from google import genai #loads gemini SDK  used for API key validation, creating embeddings, for answer generation 
 
-print("Importing src modules...", flush=True)
+print("Importing src modules...", flush=True) #internal modules are being loaded helps debug delays or crashes 
 
-from src.chunker import chunk_document
-from src.config import (
-    CHUNK_OVERLAP_TOKENS,
-    CHUNK_SIZE_TOKENS,
-    EMBEDDING_DIMENSIONS,
-    EMBEDDING_MODEL,
-    MAX_PDF_FILES,
-    MAX_PDF_SIZE_MB,
-    SHOW_SOURCE_CHUNKS,
+from src.chunker import chunk_document #checks if src.chunker is loaded or not if not it opens the file and executes from top to bottom 
+from src.config import ( #similary checks the laading of file 
+    CHUNK_OVERLAP_TOKENS, #50
+    CHUNK_SIZE_TOKENS, #500
+    EMBEDDING_DIMENSIONS, #768 vector size
+    EMBEDDING_MODEL, #gemini-embedding-001
+    MAX_PDF_FILES, #15
+    MAX_PDF_SIZE_MB, #50 file limits
+    SHOW_SOURCE_CHUNKS, # Show/hide "Source Chunks" section by default
 )
-from src.context_generator import ContextGenerationError, contextualize_chunks
+from src.context_generator import ContextGenerationError, contextualize_chunks #checks if the file is loaded or not if not executes from top to bottom
 from src.embeddings import EmbeddingError, create_embeddings_batch
-from src.file_handler import (
+from src.file_handler import ( #for saving and loading embedding 
     BundleError,
     create_embeddings_bundle,
     load_embeddings_bundle,
     validate_zip_bundle,
 )
-from src.models import EmbeddingsBundle
-from src.pdf_processor import PDFProcessingError, extract_text_from_uploaded_files
-from src.query_engine import QueryError, process_query
+from src.models import EmbeddingsBundle #for structured data flow 
+from src.pdf_processor import PDFProcessingError, extract_text_from_uploaded_files #extract text form pdfs
+from src.query_engine import QueryError, process_query #handles query -> answers pipeline
 
-
+#UI 
 def init_session_state():
     """Initialize session state variables."""
     defaults = {
-        "api_key": None,
         "client": None,
         "embeddings_bundle": None,
         "pdf_files": None,
@@ -51,49 +51,13 @@ def init_session_state():
         if key not in st.session_state:
             st.session_state[key] = value
 
-
-def validate_api_key(api_key: str) -> bool:
-    """Validate API key by attempting to create a client."""
-    if not api_key or len(api_key) < 20:
-        return False
-    try:
-        client = genai.Client(api_key=api_key)
-        # Quick test - list models
-        list(client.models.list())
-        return True
-    except Exception:
-        return False
-
-
-def render_sidebar():
-    """Render the sidebar with API key input."""
-    with st.sidebar:
-        st.header("Configuration")
-
-        api_key = st.text_input(
-            "Google AI API Key",
-            type="password",
-            value=st.session_state.api_key or "",
-            help="Enter your Google AI API key from https://aistudio.google.com/apikey",
-        )
-
-        if api_key:
-            if api_key != st.session_state.api_key:
-                with st.spinner("Validating API key..."):
-                    if validate_api_key(api_key):
-                        st.session_state.api_key = api_key
-                        st.session_state.client = genai.Client(api_key=api_key)
-                        st.success("API key validated!")
-                    else:
-                        st.error("Invalid API key. Please check and try again.")
-                        st.session_state.api_key = None
-                        st.session_state.client = None
-            else:
-                st.success("API key set")
-        else:
-            st.warning("Please enter your API key to continue.")
-
-
+def get_genai_client():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        st.error("API key not configured. Please contact administrator.")
+        st.stop()
+    return genai.Client(api_key=api_key)
+    
 def render_create_embeddings_tab():
     """Render the Create Embeddings tab."""
     st.header("Create Embeddings from PDFs")
@@ -148,7 +112,7 @@ def process_pdfs(uploaded_files):
         status_text.text("Step 1/4: Extracting text from PDFs...")
         progress_bar.progress(5)
 
-        documents = extract_text_from_uploaded_files(uploaded_files)
+        documents = extract_text_from_uploaded_files(uploaded_files) #from pdf-processor
         print(f"[Step 1/4] Extracted {len(documents)} documents", flush=True)
         for doc in documents:
             print(f"  - {doc.filename}: {len(doc.full_text)} chars", flush=True)
@@ -162,7 +126,7 @@ def process_pdfs(uploaded_files):
 
         for doc in documents:
             print(f"  Processing: {doc.filename}", flush=True)
-            chunks = chunk_document(doc.full_text, doc.filename)
+            chunks = chunk_document(doc.full_text, doc.filename) #from chunker
             print(f"  -> Created {len(chunks)} chunks", flush=True)
             doc_chunks_map[doc.filename] = (doc, chunks)
             all_chunks.extend(chunks)
@@ -197,7 +161,7 @@ def process_pdfs(uploaded_files):
                     f"Step 3/4: Generating context... ({chunks_processed}/{total_chunks} chunks)"
                 )
 
-            contextualized = contextualize_chunks(doc, chunks, client, update_progress)
+            contextualized = contextualize_chunks(doc, chunks, client, update_progress) #from context_generation 
             all_contextualized.extend(contextualized)
 
         progress_bar.progress(65)
@@ -211,7 +175,7 @@ def process_pdfs(uploaded_files):
             progress_bar.progress(min(pct, 95))
             status_text.text(f"Step 4/4: Creating embeddings... ({current}/{total})")
 
-        embeddings = create_embeddings_batch(
+        embeddings = create_embeddings_batch( #from embeddings
             texts_to_embed,
             client,
             progress_callback=embedding_progress,
@@ -279,10 +243,7 @@ def clear_chat():
 def render_query_tab():
     """Render the Query tab with two-column layout."""
     st.header("Query Your Documents")
-
-    if not st.session_state.client:
-        st.info("Please enter your API key in the sidebar to continue.")
-        return
+    
 
     # Check if bundle is already loaded
     bundle_loaded = st.session_state.embeddings_bundle is not None
@@ -405,27 +366,32 @@ def render_query_tab():
 def main():
     """Main application entry point."""
     st.set_page_config(
-        page_title="PDF Embeddings App",
+        page_title="MG Windsor Chatbot",
         page_icon="📄",
         layout="wide",
     )
 
     init_session_state()
 
-    st.title("Intelligent Q&A")
+    if st.session_state.client is None:
+        st.session_state.client = get_genai_client()
+        
+    st.title("Know Your car - AI Assistant")
     st.caption("Powered by AI.")
 
-    render_sidebar()
+    #Hide create embeddings tab 
+    tab1 = st.tabs(["Query"])[0]
 
     # Main tabs
-    tab1, tab2 = st.tabs(["Create Embeddings", "Query"])
+    #tab1, tab2 = st.tabs(["Create Embeddings", "Query"])
 
-    with tab1:
-        render_create_embeddings_tab()
+    #with tab1:
+      #  render_create_embeddings_tab()
 
-    with tab2:
-        render_query_tab()
+    #with tab2:
+        #render_query_tab()
 
 
 if __name__ == "__main__":
     main()
+
