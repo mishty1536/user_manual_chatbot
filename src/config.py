@@ -3,11 +3,11 @@
 # Chunking settings
 CHUNK_SIZE_TOKENS = 500
 CHUNK_OVERLAP_PERCENT = 0.10  # 10%
-CHUNK_OVERLAP_TOKENS = int(CHUNK_SIZE_TOKENS * CHUNK_OVERLAP_PERCENT)  # 50 tokens
+CHUNK_OVERLAP_TOKENS = int(CHUNK_SIZE_TOKENS * CHUNK_OVERLAP_PERCENT)  # 50 tokens preserves continuity 
 
 # Embedding settings
 EMBEDDING_MODEL = "gemini-embedding-001"
-EMBEDDING_DIMENSIONS = 768
+EMBEDDING_DIMENSIONS = 768 #vector size 
 EMBEDDING_INPUT_LIMIT = 2048  # tokens per text
 
 # Generation settings
@@ -17,7 +17,7 @@ GENERATION_MODEL = "gemini-3-flash-preview"
 EMBEDDING_BATCH_SIZE = 100  # Max chunks per batch request
 
 # Query settings
-TOP_K_CHUNKS = 3
+TOP_K_CHUNKS = 5 #controls how much context is used 
 
 # UI settings
 SHOW_BUNDLE_DETAILS = False  # Show/hide "Bundle Details" section by default
@@ -54,3 +54,36 @@ IMPORTANT: In your response:
 3. If the context doesn't contain enough information to fully answer the question, say so and provide what information is available
 
 Format your response with the source location first, then the answer."""
+
+WARRANTY_PROMPT_TEMPLATE = """
+You are a helpful assistant answering warranty and service-related questions
+based ONLY on the provided document context.
+
+Context from the document:
+{chunks_context}
+
+User Question:
+{query}
+
+Instructions (VERY IMPORTANT):
+- Use ONLY the information available in the context.
+- Do NOT assume or invent any data.
+- For each component, identify:
+  1. The warranty or replacement frequency (if specified).
+  2. The inspection interval or range (if inspection is mentioned).
+
+Output rules:
+- Present the result STRICTLY in a table with THREE columns:
+
+| Component / System | Warranty / Replacement Frequency | Operation |
+
+- If a replacement interval (km/years) is mentioned, include it under "Warranty / Replacement Frequency" and set Operation = "Replacement".
+- If a component is marked for inspection, include the inspection interval or range
+  (e.g., "1,000 km to 150,000 km at periodic intervals") under
+  "Warranty / Replacement Frequency" and set Operation = "Inspection only".
+- If inspection includes additional actions (cleaning, lubrication, software reset),
+  mention them under Operation.
+- Do NOT leave the frequency column empty if an interval or range is available.
+- Do NOT add explanations outside the table.
+"""
+
